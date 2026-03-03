@@ -170,7 +170,6 @@ this process with PAGC's `lexicon.csv` and `gazeteer.csv` in the future.
 Portions of this code belong to their respective contributors.
 This code is released under an [MIT-X license](COPYING).
 
-Copyright (c) 2006-2014 Stephen Woodbridge.
+Copyright (c) 2006-2014 [Stephen Woodbridge](mailto:woodbri@swoodbridge.com) <br/>
 Copyright (c) 2008 Walter Bruce Sinclair
 
-woodbri@swoodbridge.com
