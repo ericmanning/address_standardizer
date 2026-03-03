@@ -11,16 +11,17 @@ This is a PostgreSQL extension, and building it requires the PostgresSQL server 
 * PostgreSQL development packages (postgresql-devel or postgresql-server-devel)
 * Access to the `pg_config` program on your path
 * [libpcre2](https://github.com/PCRE2Project/pcre2) and headers
-  ```
-  # debian
-  sudo apt install libpcre2-dev libpcre2-8-0 libpcre2-posix2
 
-  # redhat/centos
-  sudo dnf install pcre2-devel
+```
+# debian
+sudo apt install libpcre2-dev libpcre2-8-0 libpcre2-posix2
 
-  # homebrew
-  brew install pcre2
-  ```
+# redhat/centos
+sudo dnf install pcre2-devel
+
+# homebrew
+brew install pcre2
+```
 
 With the correct libraries installed and `pg_config` on the path, building with `make` should work out of the box. If it fails, you may need to edit the Makefile to specify your `pg_config` or `pgre2` locations.
 
