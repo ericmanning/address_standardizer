@@ -1,6 +1,6 @@
 # address_standardizer extension
 
-This is a fork of the [PAGC standardizer](http://www.pagcgeo.org/) and a single line address parser.
+This is a fork of the [PAGC standardizer](http://www.pagcgeo.org/) and single line address parser.
 The code is built into a single PostgreSQL extension library.
 
 
@@ -8,9 +8,9 @@ The code is built into a single PostgreSQL extension library.
 
 This is a PostgreSQL extension, and building it requires the PostgresSQL server headers, and regular expression library development headers.
 
-* PostgreSQL development packages (postgresql-devel or postgresql-server-devel)
-* Access to the `pg_config` program on your path
-* [libpcre2](https://github.com/PCRE2Project/pcre2) and headers
+* Install PostgreSQL development packages (`postgresql-devel` or `postgresql-server-devel`)
+* Check access to the `pg_config` program on your path
+* Install [libpcre2](https://github.com/PCRE2Project/pcre2) and headers
 
 ```
 # debian
@@ -23,7 +23,7 @@ sudo dnf install pcre2-devel
 brew install pcre2
 ```
 
-With the correct libraries installed and `pg_config` on the path, building with `make` should work out of the box. If it fails, you may need to edit the Makefile to specify your `pg_config` or `pgre2` locations.
+With the correct libraries installed and `pg_config` on the path, building with `make` should work out of the box. If it fails, you may need to edit the Makefile to specify your `pg_config` or `pcre2` locations.
 
 ```
 make
