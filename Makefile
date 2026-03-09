@@ -14,13 +14,12 @@ AS_VERSION = $(shell grep default $(EXTENSION).control | cut -f2 -d'=' | tr -d "
 #
 PG_CONFIG = pg_config
 
-
 MODULE_big = $(EXTENSION)
 
 SRCS = $(wildcard src/*.c)
 OBJS = $(SRCS:.c=.o)
 
-DATA = \
+DATA_built = \
 	data/$(EXTENSION).sql \
 	data/$(EXTENSION)_upgrade.sql \
 	data/$(EXTENSION)--$(AS_VERSION).sql \
@@ -33,15 +32,15 @@ REGRESS = \
 	standardize_address_1 \
 	standardize_address_2
 
-PG_CFLAGS += -DAS_VERSION=\"$(AS_VERSION)\"
-PG_CFLAGS += -DPCRE_VERSION=2
-PG_LDFLAGS += -lpcre2-8
-
 #PG_LIBS
-#LIBS += 
-#SHLIB_LINK := $(LIBS)
+#LIBS +=
 
-EXTRA_CLEAN = $(DATA)
+PG_CPPFLAGS += -DAS_VERSION=\"$(AS_VERSION)\" -DPCRE_VERSION=2
+#PG_CFLAGS +=
+SHLIB_LINK += -lpcre2-8
+
+
+EXTRA_CLEAN = $(DATA_built)
 
 ifdef DEBUG
 COPT += -O0 -Werror -g

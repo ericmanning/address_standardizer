@@ -3,3 +3,6 @@
 *.dylib
 *.a
 data/*.sql
+test/regression.diffs
+test/regression.out
+test/results/*.out
