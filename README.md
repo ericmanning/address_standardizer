@@ -1,5 +1,7 @@
 # address_standardizer extension
 
+[![CI](https://github.com/postgis/address_standardizer/workflows/CI/badge.svg)](https://github.com/postgis/address_standardizer/actions)
+
 This is a fork of the [PAGC standardizer](http://www.pagcgeo.org/) and single line address parser.
 The code is built into a single PostgreSQL extension library.
 
