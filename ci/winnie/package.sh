@@ -5,7 +5,7 @@
 ###
 
 . $(dirname $0)/winnie_common.sh
-
+cd ${WORKSPACE}
 
 export REL_PGVER=${PG_VER//./} #strip the period
 

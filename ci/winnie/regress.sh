@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/winnie_common.sh
+cd ${WORKSPACE}
 make
 make install
 cp *.dll ${PGPATHEDB}/lib/

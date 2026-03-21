@@ -42,7 +42,9 @@ else
 fi;
 
 
-export WORKSPACE=`pwd`
+#export WORKSPACE=`pwd`
+export WORKSPACE=${SOURCE_FOLDER}
+echo Workspace is: $WORKSPACE
 
 echo PATH BEFORE: $PATH
 
