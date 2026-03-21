@@ -1,6 +1,7 @@
 *.o
 *.so
 *.dylib
+*.dll
 *.a
 data/*.sql
 test/regression.diffs
