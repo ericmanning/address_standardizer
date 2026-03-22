@@ -31,7 +31,8 @@ echo "ADDRESS_STANDARDIZER: ${AS_VER} https://github.com/postgis/address_standar
 strip *.dll
 
 
-cp -r *.control ${outdir}/share/extension
+cp -r *.control ${outdir}/share/extension/
+cp -r data/*.sql ${outdir}/share/extension/
 cp -r *.dll ${outdir}/lib/
 cp -r README.md ${outdir}/
 cp -r ${PCRE2_PATH}/bin/*.dll ${outdir}/bin/
