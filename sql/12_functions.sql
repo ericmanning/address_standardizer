@@ -3,18 +3,6 @@
 -- Author: Stephen Woodbridge <woodbri@imaptools.com>
 ---------------------------------------------------------------------
 
-DO $$
-BEGIN
-    -- Check if the extension exists in the current database
-    IF EXISTS (
-        SELECT 1
-        FROM pg_extension
-        WHERE extname = 'address_standardizer_data_us'
-    ) THEN
-        RAISE EXCEPTION 'Extension "address_standardizer_data_us" is active. Please drop it before proceeding.';
-    END IF;
-END $$;
-
 -- Availability: 3.4.0
 CREATE OR REPLACE FUNCTION debug_standardize_address(
         lextab text,
@@ -59,4 +47,7 @@ CREATE OR REPLACE FUNCTION parse_address(IN text,
     AS  'MODULE_PATHNAME', 'parse_address'
     LANGUAGE 'c' IMMUTABLE STRICT;
 
-
+CREATE OR REPLACE FUNCTION strip_explicit_country(IN text)
+    RETURNS text
+    AS  'MODULE_PATHNAME', 'strip_explicit_country'
+    LANGUAGE 'c' IMMUTABLE STRICT;

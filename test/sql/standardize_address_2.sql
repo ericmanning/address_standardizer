@@ -1,4 +1,9 @@
-create extension address_standardizer;
+SELECT '#state_only_macro_5arg' AS ticket, * FROM standardize_address(
+    'us_lex',
+    'us_gaz',
+    'us_rules',
+    '25 Prince Street',
+    'NC 09985');
 
 drop table if exists addresses cascade;
 create table addresses (
@@ -113,6 +118,3 @@ copy addresses (micro,macro) from stdin;
 select (std).* from (
     select standardize_address('us_lex', 'us_gaz', 'us_rules', micro, macro) as std
       from addresses) as foo;
-
-drop extension address_standardizer;
-

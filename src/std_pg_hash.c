@@ -14,7 +14,6 @@
 /* standardizer headers */
 #undef DEBUG
 //#define DEBUG 1
-
 #include "pagc_api.h"
 #include "pagc_std_api.h"
 #include "std_pg_hash.h"
@@ -369,8 +368,7 @@ AddToStdPortalCache(StdPortalCache *STDCache, char *lextab, char *gaztab, char *
     DBG("STDCache->NextSlot=%d", STDCache->NextSlot);
 }
 
-
-/* pubilc api */
+/* public api */
 StdCache
 GetStdCache(FunctionCallInfo fcinfo) {
     return (StdCache) GetStdPortalCache(fcinfo);

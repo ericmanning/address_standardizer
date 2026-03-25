@@ -1,4 +1,4 @@
-create extension address_standardizer;
+\pset pager off
 drop table if exists test_parse_address cascade;
 NOTICE:  table "test_parse_address" does not exist, skipping
 create table test_parse_address (
@@ -14,4 +14,4 @@ select id, instring, outstring as expected, parse_address(instring) as got_resul
 ----+----------+----------+------------
 (0 rows)
 
-drop extension address_standardizer;
+\q

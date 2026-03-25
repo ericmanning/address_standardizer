@@ -2,6 +2,7 @@
 # address_standardizer
 #
 EXTENSION = address_standardizer
+DATA_EXTENSION = address_standardizer_data_us
 
 #
 # To set the version, edit the default in the control file
@@ -15,18 +16,20 @@ AS_VERSION = $(shell grep default $(EXTENSION).control | cut -f2 -d'=' | tr -d "
 PG_CONFIG = pg_config
 
 MODULE_big = $(EXTENSION)
+DATA = $(DATA_EXTENSION).control
 
 SRCS = $(wildcard src/*.c)
 OBJS = $(SRCS:.c=.o)
 
 DATA_built = \
-	data/$(EXTENSION).sql \
-	data/$(EXTENSION)_upgrade.sql \
 	data/$(EXTENSION)--$(AS_VERSION).sql \
-	data/$(EXTENSION)--ANY--$(AS_VERSION).sql
+	data/$(EXTENSION)--ANY--$(AS_VERSION).sql \
+	data/$(DATA_EXTENSION)--$(AS_VERSION).sql \
+	data/$(DATA_EXTENSION)--ANY--$(AS_VERSION).sql
 
 REGRESS_OPTS = --inputdir=test --outputdir=test
 REGRESS = \
+	init-extensions \
 	debug_standardize_address \
 	parseaddress \
 	standardize_address_1 \
@@ -40,28 +43,34 @@ PG_CPPFLAGS += -DAS_VERSION=\"$(AS_VERSION)\" -DPCRE_VERSION=2
 SHLIB_LINK += -lpcre2-8
 
 
-EXTRA_CLEAN = $(DATA_built)
+EXTRA_CLEAN = $(DATA_built) data/$(EXTENSION)_core.sql data/$(DATA_EXTENSION)_core.sql
 
 ifdef DEBUG
 COPT += -O0 -Werror -g
 endif
 
-all: $(DATA)
+all: $(DATA_built)
 
-data/$(EXTENSION).sql: $(wildcard sql/*.sql)
+data:
+	mkdir -p $@
+
+data/$(EXTENSION)_core.sql: sql/01_types.sql sql/12_functions.sql | data
 	cat $^ > $@
 
-data/$(EXTENSION)_upgrade.sql: $(wildcard sql/1*.sql)
+data/$(DATA_EXTENSION)_core.sql: sql/13_us_lex.sql sql/14_us_gaz.sql sql/15_us_rules.sql sql/16_data_extension.sql | data
 	cat $^ > $@
 
-data/$(EXTENSION)--$(AS_VERSION).sql: data/$(EXTENSION).sql
+data/$(EXTENSION)--$(AS_VERSION).sql: data/$(EXTENSION)_core.sql | data
 	cat $^ > $@
 
-data/$(EXTENSION)--ANY--$(AS_VERSION).sql: data/$(EXTENSION)_upgrade.sql
+data/$(EXTENSION)--ANY--$(AS_VERSION).sql: sql/12_functions.sql | data
 	cat $^ > $@
 
+data/$(DATA_EXTENSION)--$(AS_VERSION).sql: data/$(DATA_EXTENSION)_core.sql | data
+	cat $^ > $@
+
+data/$(DATA_EXTENSION)--ANY--$(AS_VERSION).sql: data/$(DATA_EXTENSION)_core.sql | data
+	cat $^ > $@
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
-
-

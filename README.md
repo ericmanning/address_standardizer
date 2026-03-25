@@ -5,6 +5,9 @@
 This is a fork of the [PAGC standardizer](http://www.pagcgeo.org/) and single line address parser.
 The code is built into a single PostgreSQL extension library.
 
+Project history notes, including the standalone split from PostGIS and recent
+standalone changes, live in [NEWS.md](NEWS.md).
+
 
 ## Build and Install
 
@@ -30,6 +33,34 @@ With the correct libraries installed and `pg_config` on the path, building with 
 ```
 make
 sudo make install
+```
+
+## Testing
+
+For a self-contained regression run against the freshly built extension, use:
+
+```
+make -j check
+```
+
+`make check` creates a temporary install tree and PostgreSQL cluster, runs the
+regressions, and cleans everything up afterward. This requires PostgreSQL 16 or
+newer because it relies on `extension_control_path`.
+
+If you want to inspect the temporary cluster after a failure, keep the scratch
+artifacts with:
+
+```
+KEEP_CHECK_ARTIFACTS=1 make check
+```
+
+On older PostgreSQL versions, fall back to the traditional flow against an
+existing server:
+
+```
+make
+sudo make install
+make installcheck
 ```
 
 Once build and installed, you can activate the extension with `CREATE EXTENSION`.
@@ -175,4 +206,3 @@ This code is released under an [MIT-X license](COPYING).
 
 Copyright (c) 2006-2014 [Stephen Woodbridge](mailto:woodbri@swoodbridge.com) <br/>
 Copyright (c) 2008 Walter Bruce Sinclair
-
