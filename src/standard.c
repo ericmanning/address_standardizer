@@ -280,7 +280,7 @@ static char * _Scan_Next_( STAND_PARAM *__stand_param__,char * __in_ptr__)
 	/*-- <remarks> Type 2 terminators ( spacing ) </remarks> --*/
 	if (strchr(__spacer__,a) != NULL)
 	{
-		NO_COLLECT_WHILE(strchr(__spacer__,a) != NULL) ;
+		NO_COLLECT_WHILE(a != SENTINEL && strchr(__spacer__,a) != NULL) ;
 		set_term(__stand_param__,2,__scan_buf__) ;
 		/*-- <remarks> Retain position </remarks> --*/
 		return (__src__) ;

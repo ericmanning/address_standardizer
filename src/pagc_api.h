@@ -19,7 +19,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #ifndef PGC_H
 #define PGC_H
 
+#ifndef BUILD_API
 #define BUILD_API
+#endif
 
 #include <postgres.h>
 

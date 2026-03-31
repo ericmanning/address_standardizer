@@ -350,8 +350,15 @@ static char *_get_standard_(STAND_PARAM *__stand_param__ ,int lex_pos, int outpu
 			on the house number that use strings rather than integers -
 			we won't do this on zip codes. There may arise some need to
 			do it for unit and box numbers in the future. --*/
+		/*-- Copy into the per-call lex_vector Text buffer so we don't
+			modify the shared lexicon DEF->Standard (thread-safety). --*/
+		char *__local_buf__ = __stand_param__->lex_vector[lex_pos].Text ;
 		char *__zero_pointer__ ;
-		char *__buffer_pointer__ = __zero_pointer__ = __selected_standardization__ ;
+		char *__buffer_pointer__ ;
+		if (__local_buf__ != __selected_standardization__)
+			strcpy( __local_buf__ , __selected_standardization__ ) ;
+		__selected_standardization__ = __local_buf__ ;
+		__buffer_pointer__ = __zero_pointer__ = __selected_standardization__ ;
 		while ( *__zero_pointer__ == '0' ) __zero_pointer__++ ; /*-- Move to first nonzero character --*/
 		while ( *__zero_pointer__ != SENTINEL ) *__buffer_pointer__++ = *__zero_pointer__++ ; /*-- Move down in buffer --*/
 		/*-- Trim down all-zeroes to a single zero: if deleting all
