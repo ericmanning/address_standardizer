@@ -7,3 +7,6 @@ data/*.sql
 test/regression.diffs
 test/regression.out
 test/results/*.out
+build/
+.DS_Store
+.vscode/
