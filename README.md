@@ -206,3 +206,7 @@ This code is released under an [MIT-X license](COPYING).
 
 Copyright (c) 2006-2014 [Stephen Woodbridge](mailto:woodbri@swoodbridge.com) <br/>
 Copyright (c) 2008 Walter Bruce Sinclair
+
+Modifications made in this repository from the upstream fork are
+
+Copyright (c) 2026 The Trustees of Princeton University
