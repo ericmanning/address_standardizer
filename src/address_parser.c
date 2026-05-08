@@ -14,10 +14,10 @@
 //#define DEBUG 1
 
 #ifdef DEBUG
-#define DBG(format, arg...)                     \
-    elog(NOTICE, format , ## arg)
+#define DBG(format, ...)                     \
+    elog(NOTICE, format , ##__VA_ARGS__)
 #else
-#define DBG(format, arg...) do { ; } while (0)
+#define DBG(...) do { ; } while (0)
 #endif
 
 Datum parse_address(PG_FUNCTION_ARGS);
