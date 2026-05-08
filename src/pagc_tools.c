@@ -23,9 +23,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#ifndef _MSC_VER
-/* unistd.h is POSIX-only; nothing in this file actually references its
- * symbols, but it's been included historically. Skip on MSVC. */
+/* getcwd lives in <unistd.h> on POSIX and <direct.h> on MSVC (under the
+ * underscored name _getcwd). Pull in the right header per platform. */
+#ifdef _MSC_VER
+#include <direct.h>
+#define getcwd _getcwd
+#else
 #include <unistd.h>
 #endif
 #include "pagc_common.h"
