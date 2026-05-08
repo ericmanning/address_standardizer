@@ -28,6 +28,16 @@
 
 #include "parseaddress-api.h"
 
+/* MSVC accepts the C11 _Thread_local keyword only in C11 mode; the DuckDB
+ * extension build doesn't pass /std:c11, so use the equivalent
+ * compiler-specific spelling on MSVC. Everywhere else (gcc/clang/MinGW),
+ * _Thread_local is recognized in any mode. */
+#if defined(_MSC_VER)
+#define PAGC_THREAD_LOCAL __declspec(thread)
+#else
+#define PAGC_THREAD_LOCAL _Thread_local
+#endif
+
 #undef DEBUG
 // #define DEBUG 1
 
@@ -382,8 +392,8 @@ typedef struct
 	pcre *re;
 } match_cache_entry;
 
-static _Thread_local match_cache_entry _match_cache[MATCH_CACHE_SIZE];
-static _Thread_local int _match_cache_n = 0;
+static PAGC_THREAD_LOCAL match_cache_entry _match_cache[MATCH_CACHE_SIZE];
+static PAGC_THREAD_LOCAL int _match_cache_n = 0;
 
 int
 match(char *pattern, char *s, int *ovect, int options)
@@ -475,9 +485,9 @@ typedef struct
 	pcre2_code *re;
 } match_cache_entry;
 
-static _Thread_local match_cache_entry _match_cache[MATCH_CACHE_SIZE];
-static _Thread_local int _match_cache_n = 0;
-static _Thread_local pcre2_match_data *_cached_match_data = NULL;
+static PAGC_THREAD_LOCAL match_cache_entry _match_cache[MATCH_CACHE_SIZE];
+static PAGC_THREAD_LOCAL int _match_cache_n = 0;
+static PAGC_THREAD_LOCAL pcre2_match_data *_cached_match_data = NULL;
 
 int
 match(char *pattern, char *s, int *ovect, int options)
