@@ -2,9 +2,7 @@
 #ifndef PAGC_STD_API_H
 #define PAGC_STD_API_H
 
-#ifndef BUILD_API
 #define BUILD_API
-#endif
 
 typedef struct LEXICON_s {
     ENTRY **hash_table;
