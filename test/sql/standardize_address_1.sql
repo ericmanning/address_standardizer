@@ -10,10 +10,40 @@ SELECT '#5299b' AS ticket, * FROM standardize_address('us_lex',  'us_gaz', 'us_r
 SELECT '#5695a' AS ticket, * FROM standardize_address('us_lex', 'us_gaz', 'us_rules', 'ONE E PIMA ST STE 999, TUCSON, AZ');
 SELECT '#2459a' AS ticket, * FROM standardize_address('us_lex', 'us_gaz', 'us_rules', '26 Court Street, Boston, Massachusetts 02109, France');
 SELECT '#2459b' AS ticket, * FROM standardize_address('us_lex', 'us_gaz', 'us_rules', '212 3rd Ave N, MINNEAPOLIS, MN 553404');
+SET statement_timeout = '2s';
+SELECT '#hash_unit' AS ticket, house_num, name, suftype, unit FROM standardize_address(
+    'us_lex', 'us_gaz', 'us_rules', '123 Main St #4', 'Boston, MA');
+SELECT '#hash_unit_attached' AS ticket, house_num, name, suftype, unit FROM standardize_address(
+    'us_lex', 'us_gaz', 'us_rules', '123 Main St#4', 'Boston, MA');
+SELECT '#unit_order' AS ticket, house_num, name, suftype, unit FROM standardize_address(
+    'us_lex', 'us_gaz', 'us_rules', '123 Main St Rear Apt 2', 'Boston, MA');
+SELECT '#ca_postal' AS ticket, postcode FROM standardize_address(
+    'us_lex', 'us_gaz', 'us_rules', '123 King St', 'Toronto, ON M5V 2T6');
+RESET statement_timeout;
 DO $$
 BEGIN
 	PERFORM standardize_address('us_lex', 'us_gaz', 'us_rules', '   ');
 EXCEPTION WHEN OTHERS THEN
 	RAISE NOTICE 'blank-input: %', SQLERRM;
+END
+$$;
+-- CVE: rule with >128 terms must be rejected gracefully, not crash (stack OOB write)
+CREATE TEMP TABLE t_overlong_rule(id serial, rule text);
+INSERT INTO t_overlong_rule(rule) SELECT string_agg('1', ' ') FROM generate_series(1, 130);
+DO $$
+BEGIN
+	PERFORM standardize_address('us_lex', 'us_gaz', 't_overlong_rule', '1 Main St', 'Boston, MA');
+EXCEPTION WHEN OTHERS THEN
+	RAISE NOTICE 'overlong-rule: %', SQLERRM;
+END
+$$;
+-- OOB read: rule missing type/weight tokens must be rejected, not read past array end
+CREATE TEMP TABLE t_short_rule(id serial, rule text);
+INSERT INTO t_short_rule(rule) VALUES ('1 -1 5 -1');
+DO $$
+BEGIN
+	PERFORM standardize_address('us_lex', 'us_gaz', 't_short_rule', '1 Main St', 'Boston, MA');
+EXCEPTION WHEN OTHERS THEN
+	RAISE NOTICE 'short-rule: %', SQLERRM;
 END
 $$;

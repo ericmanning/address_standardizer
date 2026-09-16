@@ -548,6 +548,14 @@ parse_macro_input(const char *function_name, const char *raw_macro)
 					 : pstrdup(parsed_macro->address1);
 		parsed_macro->address1 = NULL;
 	}
+	else if (!has_macro_tail && parsed_macro->address1 && parsed_macro->address1[0] != '\0' && !parsed_macro->num &&
+		 !parsed_macro->street && !parsed_macro->street2)
+	{
+		parsed_macro->city = (parsed_macro->city && parsed_macro->city[0] != '\0')
+					 ? psprintf("%s, %s", parsed_macro->address1, parsed_macro->city)
+					 : pstrdup(parsed_macro->address1);
+		parsed_macro->address1 = NULL;
+	}
 
 	/*
 	 * State/postcode-only macros can still surface the state text in the city
@@ -597,6 +605,9 @@ debug_standardize_address(PG_FUNCTION_ARGS)
 	initStringInfo(result);
 
 	appendStringInfoChar(result, '{');
+
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2) || PG_ARGISNULL(3))
+		PG_RETURN_NULL();
 
 	lextab = text_to_cstring(PG_GETARG_TEXT_P(0));
 	gaztab = text_to_cstring(PG_GETARG_TEXT_P(1));
@@ -664,8 +675,12 @@ debug_standardize_address(PG_FUNCTION_ARGS)
 
 		appendStringInfoString(result, ", \"rules\":[");
 		rule_sql = makeStringInfo();
-		appendStringInfo(
-		    rule_sql, "SELECT id, rule FROM %s WHERE rule LIKE $1::varchar", quote_identifier(rultab));
+		{
+			char *safe_rultab = resolve_and_quote_tabname(rultab);
+			if (!safe_rultab)
+				elog(ERROR, "%s: rules table \"%s\" does not exist", __func__, rultab);
+			appendStringInfo(rule_sql, "SELECT id, rule FROM %s WHERE rule LIKE $1::varchar", safe_rultab);
+		}
 
 		spi_connect_result = SPI_connect();
 		if (spi_connect_result != SPI_OK_CONNECT)

@@ -23,10 +23,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 #undef DEBUG
 //#define DEBUG 1
 
-#include <stdlib.h>
+#include "postgres.h"
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <wchar.h>
+#include <wctype.h>
+#ifndef PAGC_STANDALONE
+#include "mb/pg_wchar.h"
+#include "tsearch/ts_locale.h"
+#endif
 #include "pagc_api.h"
 #ifdef BUILD_API
 #include "pagc_std_api.h"
@@ -40,10 +46,167 @@ static int _Close_Stand_Field_(STAND_PARAM *) ;
 static int _Scan_String_(STAND_PARAM *, char *) ;
 static char * _Scan_Next_(STAND_PARAM *, char *) ;
 
+static int _Character_Length_(const char *character)
+{
+#ifndef PAGC_STANDALONE
+	return pg_mblen_unbounded(character) ;
+#else
+	mbstate_t state ;
+	size_t length ;
+	wchar_t wide_character ;
+
+	memset(&state, 0, sizeof(state)) ;
+	length = mbrtowc(&wide_character, character, MB_CUR_MAX, &state) ;
+	if ((length == (size_t) -1) || (length == (size_t) -2) || (length == 0))
+	{
+		return 1 ;
+	}
+	return (int) length ;
+#endif
+}
+
+static int _Is_Alphabetic_Character_(const char *character)
+{
+	unsigned char first_byte = (unsigned char) *character ;
+
+	if (first_byte < 0x80)
+	{
+		return isalpha(first_byte) ;
+	}
+#ifndef PAGC_STANDALONE
+	if (GetDatabaseEncoding() == PG_LATIN1)
+	{
+		/* Keep the Portuguese subset used by the BR data independent of
+		 * LC_CTYPE in single-byte LATIN1 databases. */
+		return (first_byte == 0xAA) || (first_byte == 0xBA) ||
+		       ((first_byte >= 0xC0) && (first_byte <= 0xD6)) ||
+		       ((first_byte >= 0xD8) && (first_byte <= 0xDE)) ||
+		       ((first_byte >= 0xE0) && (first_byte <= 0xF6)) ||
+		       ((first_byte >= 0xF8) && (first_byte <= 0xFE)) ;
+	}
+	if (GetDatabaseEncoding() == PG_UTF8)
+	{
+		int length = _Character_Length_(character) ;
+		pg_wchar codepoint ;
+
+		if (!pg_utf8_islegal((const unsigned char *) character, length))
+		{
+			return FALSE ;
+		}
+		codepoint = utf8_to_unicode((const unsigned char *) character) ;
+		/* PostgreSQL 14 has no locale-independent Unicode category API.
+		 * Recognize the Latin ranges used by the BR data before consulting
+		 * LC_CTYPE, so Portuguese input works even in a C-locale database. */
+		if ((codepoint == 0x00AA) || (codepoint == 0x00BA) ||
+		    ((codepoint >= 0x00C0) && (codepoint <= 0x00D6)) ||
+		    ((codepoint >= 0x00D8) && (codepoint <= 0x00DE)) ||
+		    ((codepoint >= 0x00E0) && (codepoint <= 0x00F6)) ||
+		    ((codepoint >= 0x00F8) && (codepoint <= 0x00FE)))
+		{
+			return TRUE ;
+		}
+	}
+	/* PostgreSQL classifies a complete character in the database encoding and
+	 * locale for scripts not covered by the portable Latin fast path. */
+	return t_isalpha_unbounded(character) ;
+#else
+	{
+		mbstate_t state ;
+		size_t length ;
+		wchar_t wide_character ;
+
+		memset(&state, 0, sizeof(state)) ;
+		length = mbrtowc(&wide_character, character, MB_CUR_MAX, &state) ;
+		return (length != (size_t) -1) && (length != (size_t) -2) &&
+		       (length != 0) && iswalpha(wide_character) ;
+	}
+#endif
+}
+
+/* Treat the Unicode right single quotation mark like the ASCII apostrophe
+ * used by the lexicon (for example, Dias d’Ávila). */
+static int _Is_Apostrophe_(const char *character)
+{
+	if ((unsigned char) character[0] == '\'' )
+		return TRUE ;
+#ifndef PAGC_STANDALONE
+	return GetDatabaseEncoding() == PG_UTF8 &&
+	       (unsigned char) character[0] == 0xE2 &&
+	       (unsigned char) character[1] == 0x80 &&
+	       (unsigned char) character[2] == 0x99 ;
+#else
+	return FALSE ;
+#endif
+}
+
+static int _Is_Combining_Mark_(const char *character)
+{
+	unsigned char first_byte = (unsigned char) *character ;
+	unsigned int codepoint ;
+
+	if (first_byte < 0x80)
+	{
+		return FALSE ;
+	}
+#ifndef PAGC_STANDALONE
+	if (GetDatabaseEncoding() != PG_UTF8)
+	{
+		return FALSE ;
+	}
+	{
+		int length = _Character_Length_(character) ;
+
+		if (!pg_utf8_islegal((const unsigned char *) character, length))
+		{
+			return FALSE ;
+		}
+	}
+	codepoint = utf8_to_unicode((const unsigned char *) character) ;
+#else
+	{
+		mbstate_t state ;
+		size_t length ;
+		wchar_t wide_character ;
+
+		memset(&state, 0, sizeof(state)) ;
+		length = mbrtowc(&wide_character, character, MB_CUR_MAX, &state) ;
+		if ((length == (size_t) -1) || (length == (size_t) -2) ||
+		    (length == 0))
+		{
+			return FALSE ;
+		}
+		codepoint = (unsigned int) wide_character ;
+	}
+#endif
+	return ((codepoint >= 0x0300) && (codepoint <= 0x036F)) ||
+	       ((codepoint >= 0x1AB0) && (codepoint <= 0x1AFF)) ||
+	       ((codepoint >= 0x1DC0) && (codepoint <= 0x1DFF)) ||
+	       ((codepoint >= 0x20D0) && (codepoint <= 0x20FF)) ||
+	       ((codepoint >= 0xFE20) && (codepoint <= 0xFE2F)) ;
+}
+
 static char __spacer__[] = " \\-.)}>_" ;
 
+#define NO_STANDARDIZATION_PREFIX "std_standardize_mm: No standardization of "
+#define MAX_STANDARDIZATION_ERROR_INPUT \
+	((int) (MAXSTRLEN - sizeof(NO_STANDARDIZATION_PREFIX) - 1))
+
+#define ENSURE_SCAN_ROOM(CHARS) \
+	do { \
+		if ((size_t) (__dest__ - __scan_buf__) + (CHARS) >= sizeof(__scan_buf__)) \
+		{ \
+			CLIENT_ERR(__stand_param__->errors) ; \
+			RET_ERR("_Scan_Next_: Token exceeds maximum length", \
+			        __stand_param__->errors, NULL) ; \
+		} \
+	} while (0)
+
+#define TERMINATE_SCAN_BUFFER \
+	ENSURE_SCAN_ROOM(0) ; \
+	*__dest__ = SENTINEL
+
 #define TERM_AND_LENGTH \
-	*__dest__ = SENTINEL ; \
+	TERMINATE_SCAN_BUFFER ; \
 	n = strlen(__scan_buf__)
 
 #define RETURN_NEW_MORPH(TOKEN_ARG) \
@@ -54,13 +217,17 @@ static char __spacer__[] = " \\-.)}>_" ;
 	return __src__
 
 #define COLLECT_LOOKAHEAD \
+	ENSURE_SCAN_ROOM(2) ; \
 	*__dest__++ = a ; __src__++ ; *__dest__++ = b ; __src__++
 
 #define COLLECT_WHILE(COND) \
-	do { *__dest__++ = a ; __src__++ ; a = *__src__ ; } while (COND)
+	do { \
+		ENSURE_SCAN_ROOM(1) ; \
+		*__dest__++ = a ; __src__++ ; a = *__src__ ; \
+	} while (COND)
 
 #define NO_COLLECT_WHILE(COND) \
-	do { __dest__++ ; __src__++ ; a = *__src__ ; } while (COND)
+	do { __src__++ ; a = *__src__ ; } while (COND)
 
 #define TEST_FOR_ORD_DIGIT(N,NEXT_LOW,NEXT_UP) \
 	if ((b == NEXT_LOW) || (b == NEXT_UP)) \
@@ -151,24 +318,25 @@ static char * _Scan_Next_( STAND_PARAM *__stand_param__,char * __in_ptr__)
 	char *__src__ = __in_ptr__ ;
 	char a = *__src__ ;
 	char *__dest__ = __scan_buf__ ;
-	*__dest__ = SENTINEL ;
+	TERMINATE_SCAN_BUFFER ;
 
 	/*-- <remarks> Type one terminators </remarks> --*/
 	if ((a == ',') || (a == '\t') || (a == ';'))
 	{
+		ENSURE_SCAN_ROOM(1) ;
 		*__dest__++ = a ;
-		*__dest__ = SENTINEL;
+		TERMINATE_SCAN_BUFFER ;
 		set_term(__stand_param__,1,__scan_buf__) ;
 		/*-- <remarks> Point to next input char </remarks> --*/
 		return (__src__ + 1) ;
 	}
 	/*-- <remarks> Numeric sequences : ordinals, fractions and numbers </remarks> --*/
-	if (isdigit(a))
+	if (isdigit((unsigned char) a))
 	{
         char b ;
         char last_digit ;
 
-		COLLECT_WHILE(isdigit(a)) ;
+		COLLECT_WHILE(isdigit((unsigned char) a)) ;
 		/*-- <remarks> Get a character of lookahead and one of lookbehind </remarks> --*/
 		b = *(__src__ + 1 ) ;
 		last_digit = *(__dest__ - 1 ) ; /*-- last digit collected --*/
@@ -178,7 +346,7 @@ static char * _Scan_Next_( STAND_PARAM *__stand_param__,char * __in_ptr__)
 			/*-- <remarks> Fractions </remarks> --*/
 		case '/' :
 			/*-- <remarks> Collect the rest of the fraction </remarks> --*/
-			if (isdigit(b))
+			if (isdigit((unsigned char) b))
 			{
 				switch (b)
 				{
@@ -260,12 +428,45 @@ static char * _Scan_Next_( STAND_PARAM *__stand_param__,char * __in_ptr__)
 		RETURN_NEW_MORPH(DSINGLE) ;
 	}
 	/*-- <remarks> Alphabetic sequence </remarks> --*/
-	if ((isalpha(a)) || (a == '\'') || (a == '#'))
+	if (a == '#')
 	{
-		COLLECT_WHILE((isalpha(a)) || (a == '\'')) ;
+		ENSURE_SCAN_ROOM(1) ;
+		*__dest__++ = a ;
+		__src__++ ;
+		TERM_AND_LENGTH ;
+		RETURN_NEW_MORPH(DSINGLE) ;
+	}
+	if (_Is_Alphabetic_Character_(__src__) || _Is_Apostrophe_(__src__))
+	{
+		int character_count = 0 ;
+
+		while (_Is_Alphabetic_Character_(__src__) ||
+		       _Is_Combining_Mark_(__src__) ||
+		       _Is_Apostrophe_(__src__))
+		{
+			int is_apostrophe = _Is_Apostrophe_(__src__) ;
+			int is_combining_mark = _Is_Combining_Mark_(__src__) ;
+			int character_length = is_apostrophe ?
+			                       ((unsigned char) *__src__ == '\'' ? 1 : 3) :
+			                       _Character_Length_(__src__) ;
+
+			ENSURE_SCAN_ROOM(character_length) ;
+			if (is_apostrophe)
+				*__dest__++ = '\'' ;
+			else
+			{
+				memcpy(__dest__, __src__, character_length) ;
+				__dest__ += character_length ;
+			}
+			__src__ += character_length ;
+			if (!is_combining_mark)
+			{
+				character_count++ ;
+			}
+		}
 		TERM_AND_LENGTH ;
 		/*-- <remarks> Retain position </remarks> --*/
-		switch (n)
+		switch (character_count)
 		{
 		case 1 :
 			RETURN_NEW_MORPH(DSINGLE) ;
@@ -280,9 +481,19 @@ static char * _Scan_Next_( STAND_PARAM *__stand_param__,char * __in_ptr__)
 	/*-- <remarks> Type 2 terminators ( spacing ) </remarks> --*/
 	if (strchr(__spacer__,a) != NULL)
 	{
-		NO_COLLECT_WHILE(a != SENTINEL && strchr(__spacer__,a) != NULL) ;
+		NO_COLLECT_WHILE(a != SENTINEL &&
+		                 strchr(__spacer__,a) != NULL) ;
 		set_term(__stand_param__,2,__scan_buf__) ;
 		/*-- <remarks> Retain position </remarks> --*/
+		return (__src__) ;
+	}
+	/* A non-ASCII non-letter is a complete separator, not a collection of
+	 * alphabetic bytes.  Advance over it once so punctuation such as an en dash
+	 * and spacing such as a non-breaking space cannot enter adjacent tokens. */
+	if ((unsigned char) a >= 0x80)
+	{
+		__src__ += _Character_Length_(__src__) ;
+		set_term(__stand_param__,2,__scan_buf__) ;
 		return (__src__) ;
 	}
 	/*-- <remarks> Ignore everything not specified. Point to next input char. </remarks> --*/
@@ -315,7 +526,7 @@ typedef struct STDADDR_s {  // define as required
 
 */
 
-STANDARDIZER *std_init()
+STANDARDIZER *std_init(void)
 {
     STANDARDIZER *std;
 
@@ -399,24 +610,23 @@ void std_free(STANDARDIZER *std)
 void stdaddr_free(STDADDR *stdaddr)
 {
     if (!stdaddr) return;
-    if (stdaddr->building)   free(stdaddr->building);
-    if (stdaddr->house_num)  free(stdaddr->house_num);
-    if (stdaddr->predir)     free(stdaddr->predir);
-    if (stdaddr->qual)       free(stdaddr->qual);
-    if (stdaddr->pretype)    free(stdaddr->pretype);
-    if (stdaddr->name)       free(stdaddr->name);
-    if (stdaddr->suftype)    free(stdaddr->suftype);
-    if (stdaddr->sufdir)     free(stdaddr->sufdir);
-    if (stdaddr->ruralroute) free(stdaddr->ruralroute);
-    if (stdaddr->extra)      free(stdaddr->extra);
-    if (stdaddr->city)       free(stdaddr->city);
-    if (stdaddr->state)      free(stdaddr->state);
-    if (stdaddr->country)    free(stdaddr->country);
-    if (stdaddr->postcode)   free(stdaddr->postcode);
-    if (stdaddr->box)        free(stdaddr->box);
-    if (stdaddr->unit)       free(stdaddr->unit);
-    free(stdaddr);
-    stdaddr = NULL;
+    if (stdaddr->building)   pfree(stdaddr->building);
+    if (stdaddr->house_num)  pfree(stdaddr->house_num);
+    if (stdaddr->predir)     pfree(stdaddr->predir);
+    if (stdaddr->qual)       pfree(stdaddr->qual);
+    if (stdaddr->pretype)    pfree(stdaddr->pretype);
+    if (stdaddr->name)       pfree(stdaddr->name);
+    if (stdaddr->suftype)    pfree(stdaddr->suftype);
+    if (stdaddr->sufdir)     pfree(stdaddr->sufdir);
+    if (stdaddr->ruralroute) pfree(stdaddr->ruralroute);
+    if (stdaddr->extra)      pfree(stdaddr->extra);
+    if (stdaddr->city)       pfree(stdaddr->city);
+    if (stdaddr->state)      pfree(stdaddr->state);
+    if (stdaddr->country)    pfree(stdaddr->country);
+    if (stdaddr->postcode)   pfree(stdaddr->postcode);
+    if (stdaddr->box)        pfree(stdaddr->box);
+    if (stdaddr->unit)       pfree(stdaddr->unit);
+    pfree(stdaddr);
 }
 
 static char *coalesce( char *a, char *b )
@@ -462,12 +672,12 @@ replace_stdaddr_component(char **field, const char *value)
 
 	if (*field)
 	{
-		free(*field);
+		pfree(*field);
 		*field = NULL;
 	}
 
 	if (value && value[0] != '\0')
-		*field = strdup(value);
+		*field = pstrdup(value);
 }
 
 /*
@@ -491,7 +701,7 @@ apply_component_values_to_stdaddr(
 		}
 		else
 		{
-			stdaddr->state = strdup(state);
+			stdaddr->state = pstrdup(state);
 		}
 	}
 
@@ -524,8 +734,9 @@ STDADDR *std_standardize_mm(STANDARDIZER *std, char *micro, char *macro, int opt
     if (macro && macro[0] != '\0') {
         err = standardize_field( stand_address, macro, MACRO );
         if (!err) {
-            RET_ERR1("std_standardize_mm: No standardization of %s!",
-                     macro, std -> err_p, NULL);
+            RET_ERR2(NO_STANDARDIZATION_PREFIX "%.*s!",
+                     MAX_STANDARDIZATION_ERROR_INPUT, macro,
+                     std -> err_p, NULL);
         }
 
         if (options & 1) {
@@ -537,8 +748,9 @@ STDADDR *std_standardize_mm(STANDARDIZER *std, char *micro, char *macro, int opt
 
     err = standardize_field( stand_address, micro, MICRO_M );
     if (!err) {
-        RET_ERR1("std_standardize_mm: No standardization of %s!",
-                 micro, std -> err_p, NULL);
+        RET_ERR2(NO_STANDARDIZATION_PREFIX "%.*s!",
+                 MAX_STANDARDIZATION_ERROR_INPUT, micro,
+                 std -> err_p, NULL);
     }
 
     if (options & 1) {
@@ -546,40 +758,40 @@ STDADDR *std_standardize_mm(STANDARDIZER *std, char *micro, char *macro, int opt
         send_fields_to_stream(stand_address->standard_fields , NULL, 0, 0);
     }
 
-    PAGC_CALLOC_STRUC(stdaddr,STDADDR,1,std -> err_p,NULL);
+    stdaddr = palloc0(sizeof(STDADDR));
 
     if (strlen(stand_address -> standard_fields[0]))
-        stdaddr->building   = strdup(stand_address -> standard_fields[0]);
+        stdaddr->building   = pstrdup(stand_address -> standard_fields[0]);
     if (strlen(stand_address -> standard_fields[1]))
-        stdaddr->house_num  = strdup(stand_address -> standard_fields[1]);
+        stdaddr->house_num  = pstrdup(stand_address -> standard_fields[1]);
     if (strlen(stand_address -> standard_fields[2]))
-        stdaddr->predir     = strdup(stand_address -> standard_fields[2]);
+        stdaddr->predir     = pstrdup(stand_address -> standard_fields[2]);
     if (strlen(stand_address -> standard_fields[3]))
-        stdaddr->qual       = strdup(stand_address -> standard_fields[3]);
+        stdaddr->qual       = pstrdup(stand_address -> standard_fields[3]);
     if (strlen(stand_address -> standard_fields[4]))
-        stdaddr->pretype    = strdup(stand_address -> standard_fields[4]);
+        stdaddr->pretype    = pstrdup(stand_address -> standard_fields[4]);
     if (strlen(stand_address -> standard_fields[5]))
-        stdaddr->name       = strdup(stand_address -> standard_fields[5]);
+        stdaddr->name       = pstrdup(stand_address -> standard_fields[5]);
     if (strlen(stand_address -> standard_fields[6]))
-        stdaddr->suftype    = strdup(stand_address -> standard_fields[6]);
+        stdaddr->suftype    = pstrdup(stand_address -> standard_fields[6]);
     if (strlen(stand_address -> standard_fields[7]))
-        stdaddr->sufdir     = strdup(stand_address -> standard_fields[7]);
+        stdaddr->sufdir     = pstrdup(stand_address -> standard_fields[7]);
     if (strlen(stand_address -> standard_fields[8]))
-        stdaddr->ruralroute = strdup(stand_address -> standard_fields[8]);
+        stdaddr->ruralroute = pstrdup(stand_address -> standard_fields[8]);
     if (strlen(stand_address -> standard_fields[9]))
-        stdaddr->extra      = strdup(stand_address -> standard_fields[9]);
+        stdaddr->extra      = pstrdup(stand_address -> standard_fields[9]);
     if (strlen(stand_address -> standard_fields[10]))
-        stdaddr->city       = strdup(stand_address -> standard_fields[10]);
+        stdaddr->city       = pstrdup(stand_address -> standard_fields[10]);
     if (strlen(stand_address -> standard_fields[11]))
-        stdaddr->state      = strdup(stand_address -> standard_fields[11]);
+        stdaddr->state      = pstrdup(stand_address -> standard_fields[11]);
     if (strlen(stand_address -> standard_fields[12]))
-        stdaddr->country    = strdup(stand_address -> standard_fields[12]);
+        stdaddr->country    = pstrdup(stand_address -> standard_fields[12]);
     if (strlen(stand_address -> standard_fields[13]))
-        stdaddr->postcode   = strdup(stand_address -> standard_fields[13]);
+        stdaddr->postcode   = pstrdup(stand_address -> standard_fields[13]);
     if (strlen(stand_address -> standard_fields[14]))
-        stdaddr->box        = strdup(stand_address -> standard_fields[14]);
+        stdaddr->box        = pstrdup(stand_address -> standard_fields[14]);
     if (strlen(stand_address -> standard_fields[15]))
-        stdaddr->unit       = strdup(stand_address -> standard_fields[15]);
+        stdaddr->unit       = pstrdup(stand_address -> standard_fields[15]);
 
     return stdaddr;
 }
@@ -614,11 +826,7 @@ std_standardize(STANDARDIZER *std,
 
 	if (macro_length > 1)
 	{
-		macro = malloc(macro_length);
-		if (!macro)
-		{
-			RET_ERR("std_standardize: could not allocate macro buffer", std->err_p, NULL);
-		}
+		macro = palloc(macro_length);
 
 		write_ptr = macro;
 		for (size_t i = 0; i < lengthof(components); i++)
@@ -638,7 +846,7 @@ std_standardize(STANDARDIZER *std,
 
 	stdaddr = std_standardize_mm(std, address, macro, options);
 	if (macro)
-		free(macro);
+		pfree(macro);
 
 	apply_component_values_to_stdaddr(stdaddr, city, state, postcode, country);
 	return stdaddr;

@@ -1,6 +1,6 @@
 # address_standardizer extension
 
-[![CI](https://github.com/postgis/address_standardizer/workflows/CI/badge.svg)](https://github.com/postgis/address_standardizer/actions)
+GitHub: [![CI](https://github.com/postgis/address_standardizer/workflows/CI/badge.svg)](https://github.com/postgis/address_standardizer/actions) Winnie: [![Build Status](https://winnie.postgis.net/job/address_standardizer_main/badge/icon)](https://winnie.postgis.net/job/address_standardizer_main/)
 
 This is a fork of the [PAGC standardizer](http://www.pagcgeo.org/) and single line address parser.
 The code is built into a single PostgreSQL extension library.
@@ -69,6 +69,22 @@ createdb address_db
 psql -d address_db -c "CREATE EXTENSION address_standardizer"
 ```
 
+## Datasets
+
+The extension supports datasets for different countries:
+
+* `address_standardizer_data_us`: United States address dataset (USPS based lexicon and gazetteer).
+* `address_standardizer_data_br`: Brazilian address dataset (IBGE / OpenStreetMap based lexicon, municipality and state gazetteer, and Brazilian address grammar rules).
+
+### Open Data Provenance for Brazil Dataset (`address_standardizer_data_br`)
+
+> **Data Provenance & Licensing Statement:**
+> The `address_standardizer_data_br` dataset is constructed exclusively from public open sources:
+> * **IBGE (Instituto Brasileiro de Geografia e Estatística):** Official government open data from the Public API for Localidades (Brazilian municipalities and 27 Federative Units / States) under open government data terms.
+> * **OpenStreetMap (OSM):** Community open terminology for Brazilian thoroughfare and unit types, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), licensed under the [Open Data Commons Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
+>
+> *No proprietary or copyrighted postal databases (such as Empresa Brasileira de Correios e Telégrafos - DNE) are used.*
+
 
 ## Test and Try
 
@@ -101,8 +117,33 @@ SELECT *
            ''west concord, ma 01742''::text AS macro');
 ```
 
+### Brazil (BR)
+
+```sql
+CREATE EXTENSION IF NOT EXISTS address_standardizer;
+CREATE EXTENSION IF NOT EXISTS address_standardizer_data_br;
+
+SELECT * FROM standardize_address('br_lex', 'br_gaz', 'br_rules', 'Rua Augusta, 100', 'Sao Paulo, SP');
+SELECT * FROM standardize_address('br_lex', 'br_gaz', 'br_rules', 'Avenida Paulista, 1000 Apto 101', 'Sao Paulo, SP, 01310 100');
+SELECT * FROM standardize_address('br_lex', 'br_gaz', 'br_rules', 'Rodovia dos Imigrantes, Km 50', 'Sao Paulo, SP');
+SELECT * FROM standardize_address('br_lex', 'br_gaz', 'br_rules', 'SQS 308 Bloco B Apto 101', 'Brasilia, DF');
+SELECT * FROM standardize_address('br_lex', 'br_gaz', 'br_rules', 'Quadra 10 Lote 5', 'Goiania, GO');
+```
+
 
 # Development
+
+
+## Release
+
+The `release.yml` GitHub Action defines a release-on-tag process.
+
+* Ensure the `NEWS.md` file is up-to-date and the release date is set to the current date.
+* Ensure that the version in `address_standardizer.control`, `address_standardizer_data_us.control`, and `address_standardizer_data_br.control` is set to the release version (eg `default_version = '3.7.1'`).
+* Tag the repository with that version prefixed by `v` (`git tag v3.7.1 && git push origin v3.7.1`)
+
+The release will only build out with a clean build and matching tag/version numbers.
+
 
 ## Files
 
@@ -124,7 +165,7 @@ src/
 
 ## How the Parser Works
 
-The parser works from right to left looking first at the macro elements 
+The parser works from right to left looking first at the macro elements
 for postcode, state/province, city, and then looks micro elements to determine
 if we are dealing with a house number street or intersection or landmark.
 It currently does not look for a country code or name, but that could be
@@ -180,7 +221,7 @@ and USPS city names.
 usps-st-city-orig.txt  - this file contains all the acceptable USPS city
                          names by state. I periodically extract these from the
                          USPS and generate this file. I do NOT recommend
-                         editing this file. 
+                         editing this file.
 usps-st-city-adds.txt  - this file you can add new definitions to if you need
                          them. The format of both these files is:
                          <StateAbbrev><tab><CityName>
