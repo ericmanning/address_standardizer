@@ -329,6 +329,28 @@ void upper_case( char *d ,
    if (GetDatabaseEncoding() == PG_UTF8) {
       char *end = d + MAXSTRLEN - 1 ;
       int source_length = strlen(s) ;
+      const char *ascii_probe ;
+
+      /* Fast path: for pure ASCII, NFC normalization is the identity and the
+       * loop below reduces to the plain toupper() case, so skip the three
+       * allocations and the wide-character round trip.  Address data is
+       * overwhelmingly ASCII and this runs once per token. */
+      for (ascii_probe = s ; *ascii_probe != SENTINEL ; ascii_probe++) {
+         if ((unsigned char) *ascii_probe >= 0x80)
+            break ;
+      }
+      if (*ascii_probe == SENTINEL) {
+         char *ascii_dest = d ;
+
+         for ( ; (*s != SENTINEL) && (ascii_dest < end) ; s++ ) {
+            unsigned char ch = (unsigned char) *s ;
+
+            *ascii_dest++ = (char) (((ch >= 'a') && (ch <= 'z')) ? ch - ('a' - 'A') : ch) ;
+         }
+         BLANK_STRING(ascii_dest) ;
+         return ;
+      }
+
       pg_wchar *wide = palloc((source_length + 1) * sizeof(pg_wchar)) ;
       pg_wchar *normalized ;
       char *nfc ;
