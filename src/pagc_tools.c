@@ -329,21 +329,27 @@ void upper_case( char *d ,
    if (GetDatabaseEncoding() == PG_UTF8) {
       char *end = d + MAXSTRLEN - 1 ;
       int source_length = strlen(s) ;
-      const char *ascii_probe ;
+      const char *ascii_probe = s ;
+      pg_wchar *wide ;
+      pg_wchar *normalized ;
+      char *nfc ;
+      int wide_length ;
+      int normalized_length ;
+      int nfc_length ;
+      Size nfc_capacity ;
 
       /* Fast path: for pure ASCII, NFC normalization is the identity and the
        * loop below reduces to the plain toupper() case, so skip the three
        * allocations and the wide-character round trip.  Address data is
        * overwhelmingly ASCII and this runs once per token. */
-      for (ascii_probe = s ; *ascii_probe != SENTINEL ; ascii_probe++) {
-         if ((unsigned char) *ascii_probe >= 0x80)
-            break ;
+      while ((*ascii_probe != SENTINEL) && ((unsigned char) *ascii_probe < 0x80)) {
+         ascii_probe++ ;
       }
       if (*ascii_probe == SENTINEL) {
          char *ascii_dest = d ;
 
-         for ( ; (*s != SENTINEL) && (ascii_dest < end) ; s++ ) {
-            unsigned char ch = (unsigned char) *s ;
+         while ((*s != SENTINEL) && (ascii_dest < end)) {
+            unsigned char ch = (unsigned char) *s++ ;
 
             *ascii_dest++ = (char) (((ch >= 'a') && (ch <= 'z')) ? ch - ('a' - 'A') : ch) ;
          }
@@ -351,13 +357,7 @@ void upper_case( char *d ,
          return ;
       }
 
-      pg_wchar *wide = palloc((source_length + 1) * sizeof(pg_wchar)) ;
-      pg_wchar *normalized ;
-      char *nfc ;
-      int wide_length ;
-      int normalized_length ;
-      int nfc_length ;
-      Size nfc_capacity ;
+      wide = palloc((source_length + 1) * sizeof(pg_wchar)) ;
 
       /* The BR generator uses Python's locale-independent upper().  Keep the
        * corresponding ASCII and Portuguese Latin-1 mappings independent of
